@@ -15,6 +15,14 @@
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "lwip/api.h"
+
+#include "driver/gpio.h"
+#define BLINK_GPIO 2 
+
+int state = 0;
+const static char http_html_hdr[] = "HTTP/1.1 200 OK\r\nContent-type: text/html\r\n\r\n";
+const static char http_index_hml[] = "<html><head><title>Control</title></head><body><h1>Control</h1><a href=\"h\">On</a><br><a href=\"l\">Off</a></body></html>";
 
 /* The examples use WiFi configuration that you can set via project configuration menu.
    If you'd rather not, just change the below entries to strings with
@@ -27,6 +35,76 @@
 
 static const char *TAG = "wifi softAP";
 
+static void
+http_server_netconn_serve(struct netconn *conn)
+{
+  struct netbuf *inbuf;
+  char *buf;
+  u16_t buflen;
+  err_t err;
+
+  /* Read the data from the port, blocking if nothing yet there.
+   We assume the request (the part we care about) is in one netbuf */
+  err = netconn_recv(conn, &inbuf);
+
+  if (err == ERR_OK) {
+    netbuf_data(inbuf, (void**)&buf, &buflen);
+
+    /* Is this an HTTP GET command? (only check the first 5 chars, since
+    there are other formats for GET, and we're keeping it very simple )*/
+    if (buflen>=5 &&
+        buf[0]=='G' &&
+        buf[1]=='E' &&
+        buf[2]=='T' &&
+        buf[3]==' ' &&
+        buf[4]=='/' ) {
+          printf("%c\n", buf[5]);
+      /* Send the HTML header
+             * subtract 1 from the size, since we dont send the \0 in the string
+             * NETCONN_NOCOPY: our data is const static, so no need to copy it
+       */
+       gpio_pad_select_gpio(BLINK_GPIO);
+       /* Set the GPIO as a push/pull output */
+       gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
+       if(buf[5]=='h'){
+         gpio_set_level(BLINK_GPIO,1);
+       }
+       if(buf[5]=='l'){
+         gpio_set_level(BLINK_GPIO,0);
+       }
+      netconn_write(conn, http_html_hdr, sizeof(http_html_hdr)-1, NETCONN_NOCOPY);
+
+      /* Send our HTML page */
+      netconn_write(conn, http_index_hml, sizeof(http_index_hml)-1, NETCONN_NOCOPY);
+    }
+
+  }
+  /* Close the connection (server closes in HTTP) */
+  netconn_close(conn);
+
+  /* Delete the buffer (netconn_recv gives us ownership,
+   so we have to make sure to deallocate the buffer) */
+  netbuf_delete(inbuf);
+}
+
+static void http_server(void *pvParameters)
+{
+  struct netconn *conn, *newconn;
+  err_t err;
+  conn = netconn_new(NETCONN_TCP);
+  netconn_bind(conn, NULL, 80);
+  netconn_listen(conn);
+  do {
+     err = netconn_accept(conn, &newconn);
+     if (err == ERR_OK) {
+       http_server_netconn_serve(newconn);
+       netconn_delete(newconn);
+     }
+   } while(err == ERR_OK);
+   netconn_close(conn);
+   netconn_delete(conn);
+}
+
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
 {
@@ -34,6 +112,12 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
                  MAC2STR(event->mac), event->aid);
+    } else if (event_id == WIFI_EVENT_AP_START) {
+        ESP_LOGI(TAG, "Server starting...");
+        // start the HTTP server task
+		xTaskCreate(&http_server, "http_server", 2048, NULL, 5, NULL);
+		printf("- HTTP server started\n");
+
     } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
