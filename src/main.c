@@ -1,8 +1,8 @@
-/*  WiFi softAP Example
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
+/**
+ * Program allow control ESP32 module GPIO pins via html page.
+ * Module has been configured as an access point and an http server.
+ * 
+ * Based on https://github.com/espressif/esp-idf/blob/v4.2/examples/wifi/getting_started/softAP
 */
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -17,67 +17,71 @@
 #include "lwip/sys.h"
 #include "lwip/api.h"
 
+#include "mdns.h"
+
 #include "driver/gpio.h"
 #define BLINK_GPIO 2 
 
-int state = 0;
-const static char http_html_hdr[] = "HTTP/1.1 200 OK\r\nContent-type: text/html\r\n\r\n";
-const static char http_index_hml[] = "<html><head><title>Control</title></head><body><h1>Control</h1><a href=\"h\">On</a><br><a href=\"l\">Off</a></body></html>";
+#include "html.h"
 
-/* The examples use WiFi configuration that you can set via project configuration menu.
-   If you'd rather not, just change the below entries to strings with
-   the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
+/**
+ *  HTTP headers and web pages.
+ */ 
+const static char http_html_hdr[] = "HTTP/1.1 200 OK\nContent-type: text/html\n\n";
+
+/**
+ *  Access point configuration.
 */
 #define EXAMPLE_ESP_WIFI_SSID      "CONFIG_ESP_WIFI_SSID"
 #define EXAMPLE_ESP_WIFI_PASS      "CONFIG_ESP_WIFI_PASSWORD"
 #define EXAMPLE_ESP_WIFI_CHANNEL   1
 #define EXAMPLE_MAX_STA_CONN       1
 
-static const char *TAG = "wifi softAP";
+/**
+ * GPIO pinout
+ */ 
+static const gpio_num_t FORWARD_LINE = GPIO_NUM_12; 
+static const gpio_num_t RIGHT_LINE = GPIO_NUM_13;
+static const gpio_num_t LEFT_LINE = GPIO_NUM_14;
+static const gpio_num_t BACKWARD_LINE = GPIO_NUM_27;
 
-static void
-http_server_netconn_serve(struct netconn *conn)
+static const char *TAG = "wifi softAP"; ///< debug tag
+
+/**
+ * Handling http GET requests - motor control.
+ */
+static void http_server_netconn_serve(struct netconn *conn)
 {
   struct netbuf *inbuf;
   char *buf;
   u16_t buflen;
   err_t err;
-
-  /* Read the data from the port, blocking if nothing yet there.
-   We assume the request (the part we care about) is in one netbuf */
   err = netconn_recv(conn, &inbuf);
 
   if (err == ERR_OK) {
     netbuf_data(inbuf, (void**)&buf, &buflen);
-
-    /* Is this an HTTP GET command? (only check the first 5 chars, since
-    there are other formats for GET, and we're keeping it very simple )*/
-    if (buflen>=5 &&
-        buf[0]=='G' &&
-        buf[1]=='E' &&
-        buf[2]=='T' &&
-        buf[3]==' ' &&
-        buf[4]=='/' ) {
-          printf("%c\n", buf[5]);
-      /* Send the HTML header
-             * subtract 1 from the size, since we dont send the \0 in the string
-             * NETCONN_NOCOPY: our data is const static, so no need to copy it
-       */
-       gpio_pad_select_gpio(BLINK_GPIO);
-       /* Set the GPIO as a push/pull output */
-       gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-       if(buf[5]=='h'){
-         gpio_set_level(BLINK_GPIO,1);
-       }
-       if(buf[5]=='l'){
-         gpio_set_level(BLINK_GPIO,0);
-       }
-      netconn_write(conn, http_html_hdr, sizeof(http_html_hdr)-1, NETCONN_NOCOPY);
-
-      /* Send our HTML page */
-      netconn_write(conn, http_index_hml, sizeof(http_index_hml)-1, NETCONN_NOCOPY);
+ 		char *request_line = strtok(buf, "\n");
+		if(request_line) {
+			if(strstr(request_line, "GET / ")) {				
+                printf("ASKED FOR INDEX.HTML \n\n");
+			} else if (strstr(request_line, "GET /right ")) {
+                gpio_set_level(RIGHT_LINE, 1);
+            } else if (strstr(request_line, "GET /left ")) {
+                gpio_set_level(LEFT_LINE, 1);
+            } else if (strstr(request_line, "GET /forward ")) {
+                gpio_set_level(FORWARD_LINE, 1);
+            } else if (strstr(request_line, "GET /backward ")) {
+                gpio_set_level(BACKWARD_LINE, 1);
+            } else if (strstr(request_line, "GET /stop ")) {
+                gpio_set_level(RIGHT_LINE, 0);
+                gpio_set_level(LEFT_LINE, 0);
+                gpio_set_level(FORWARD_LINE, 0);
+                gpio_set_level(BACKWARD_LINE, 0);
+            }
+        /* Send our default HTML page */
+        netconn_write(conn, http_html_hdr, sizeof(http_html_hdr)-1, NETCONN_NOCOPY);
+        netconn_write(conn, htmlExample, sizeof(htmlExample) - 1, NETCONN_NOCOPY);			   
     }
-
   }
   /* Close the connection (server closes in HTTP) */
   netconn_close(conn);
@@ -87,6 +91,9 @@ http_server_netconn_serve(struct netconn *conn)
   netbuf_delete(inbuf);
 }
 
+/**
+ * Create new TCP connection and bind to default http port.
+ */   
 static void http_server(void *pvParameters)
 {
   struct netconn *conn, *newconn;
@@ -105,6 +112,9 @@ static void http_server(void *pvParameters)
    netconn_delete(conn);
 }
 
+/**
+ * Handling wi-fi state events.
+ */
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
 {
@@ -125,6 +135,27 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
+/**
+ * Configuration mDNS service.
+ */ 
+void start_mdns_service()
+{
+    
+    esp_err_t err = mdns_init();
+    if (err) {
+        printf("MDNS Init failed: %d\n", err);
+        return;
+    }
+    //set hostname
+    mdns_hostname_set("my-esp32");
+    //set default instance
+    mdns_instance_name_set("My ESP32 AP");
+}
+
+/**
+ * Configuration and initialisation module in Access Point mode 
+ * with parameters defined above. 
+ */ 
 void wifi_init_softap(void)
 {
     ESP_ERROR_CHECK(esp_netif_init());
@@ -133,7 +164,7 @@ void wifi_init_softap(void)
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
+    start_mdns_service();
 	ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
                                                         &wifi_event_handler,
@@ -148,9 +179,6 @@ void wifi_init_softap(void)
             .authmode = WIFI_AUTH_WPA_WPA2_PSK
         },
     };
-    if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
@@ -160,8 +188,27 @@ void wifi_init_softap(void)
              EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 
+/**
+ * GPIO pins configuration.
+ */ 
+static void gpioConfig (void) {
+  gpio_num_t gpioMap[4] = {FORWARD_LINE, BACKWARD_LINE, LEFT_LINE, RIGHT_LINE };
+
+  for (uint8_t i = 0; i < (sizeof(gpioMap) / sizeof(gpio_num_t)); i++) {
+      gpio_pad_select_gpio(gpioMap[i]);
+      gpio_set_direction(gpioMap[i], GPIO_MODE_OUTPUT);
+      gpio_set_level(gpioMap[i], 0);
+  }
+} 
+
+/**
+ * Main function.
+ */ 
 void app_main(void)
 {
+    //set GPIOs
+    gpioConfig();
+
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {

@@ -7,19 +7,15 @@ const char htmlExample[] =
 "<head> " 
 "    <meta charset=\"UTF-8\">  " 
 "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"> "
-"    <title>historyAPI Example</title>  " 
+"    <title>ESP32 Remote Control Example</title>  " 
 "    <script language=\"JavaScript\">  " 
-
-
 "        window.onload = load;  "
 "        let lastRequestDir = \"STOP\";  " 
 
 "        function load() {  "
-"            console.log(\"ONLOAD\"); "
-
 "            document.addEventListener(\"keydown\", function onPress(event) {  " 
 "                var key = event.keyCode;  " 
-//"                console.log(key);  "            
+
 "                switch (event.which || event.keyCode) {  " 
 "                case 37:  " 
 "                    move(\"LEFT\");  " 
@@ -37,20 +33,17 @@ const char htmlExample[] =
 "            });  " 
 
 "            document.addEventListener(\"keyup\", function onRelease() { "
-//"                 console.log(\"STOP\");    "
-"                lastRequestDir = \"STOP\"; "
-"                fetch(`http://my-esp32.local/stop`);  " 
+"            stop();    "
 "            });    "
 "        };  " 
 
 "        function move(direction) {  " 
-        
 "           if (direction != lastRequestDir) {  "
 "               lastRequestDir = direction;  "
 "       console.log(direction); "
 "               switch (direction) {  " 
 "               case \"UP\":  " 
-"                 fetch(`http://my-esp32.local/forward`);  " 
+"                 fetch(`http://my-esp32.local/forward`);  "
 "                 break;  "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
 "               case \"DOWN\":  " 
 "                 fetch(`http://my-esp32.local/backward`);  " 
@@ -61,24 +54,22 @@ const char htmlExample[] =
 "               case \"RIGHT\":  " 
 "                 fetch(`http://my-esp32.local/right`);  " 
 "                 break;  " 
+
+"               default:  " 
+"                 stop();   " 
+"                 break;  " 
+
 "               }  "     
 "           }  "
 "        };  " 
 
 "       function stop() {   "
-//"            console.log(\"STOP\");    "
 "                lastRequestDir = \"STOP\"; "
 "            fetch(`http://my-esp32.local/stop`);  " 
 "       }; "
 "    </script>  "
 "</head>  " 
 "<body>  " 
-/*
-"    <button onclick='move(\"UP\")'>UP</button>  " 
-"    <button onclick='move(\"DOWN\")'>DOWN</button>  " 
-"    <button onclick='move(\"LEFT\")'>LEFT</button>  " 
-"    <button onclick='move(\"RIGHT\")'>RIGHT</button>  " 
-*/
 "   <button onmousedown='move(\"UP\")' onmouseup='stop()'>UP</button>  " 
 "   <button onmousedown='move(\"DOWN\")' onmouseup='stop()'>DOWN</button>  " 
 "   <button onmousedown='move(\"LEFT\")' onmouseup='stop()'>LEFT</button>  " 
