@@ -1,3 +1,9 @@
+/** 
+ * HTML page for remote control of the ESP32 module GPIO pins.
+ * Contains 4 buttons and JavaScript code for keyboard control.
+ * It uses the fetch API to send asynchronous queries to web server.
+ */
+
 #pragma once
 #include <stdio.h>
 
@@ -54,7 +60,6 @@ const char htmlExample[] =
 "               case \"RIGHT\":  " 
 "                 fetch(`http://my-esp32.local/right`);  " 
 "                 break;  " 
-
 "               default:  " 
 "                 stop();   " 
 "                 break;  " 

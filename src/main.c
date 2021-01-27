@@ -16,11 +16,9 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "lwip/api.h"
-
 #include "mdns.h"
 
 #include "driver/gpio.h"
-#define BLINK_GPIO 2 
 
 #include "html.h"
 
@@ -44,6 +42,7 @@ static const gpio_num_t FORWARD_LINE = GPIO_NUM_12;
 static const gpio_num_t RIGHT_LINE = GPIO_NUM_13;
 static const gpio_num_t LEFT_LINE = GPIO_NUM_14;
 static const gpio_num_t BACKWARD_LINE = GPIO_NUM_27;
+static const gpio_num_t BLINK_GPIO = GPIO_NUM_2;
 
 static const char *TAG = "wifi softAP"; ///< debug tag
 
@@ -146,9 +145,7 @@ void start_mdns_service()
         printf("MDNS Init failed: %d\n", err);
         return;
     }
-    //set hostname
     mdns_hostname_set("my-esp32");
-    //set default instance
     mdns_instance_name_set("My ESP32 AP");
 }
 
@@ -192,7 +189,7 @@ void wifi_init_softap(void)
  * GPIO pins configuration.
  */ 
 static void gpioConfig (void) {
-  gpio_num_t gpioMap[4] = {FORWARD_LINE, BACKWARD_LINE, LEFT_LINE, RIGHT_LINE };
+  gpio_num_t gpioMap[] = {FORWARD_LINE, BACKWARD_LINE, LEFT_LINE, RIGHT_LINE, BLINK_GPIO};
 
   for (uint8_t i = 0; i < (sizeof(gpioMap) / sizeof(gpio_num_t)); i++) {
       gpio_pad_select_gpio(gpioMap[i]);
@@ -202,14 +199,25 @@ static void gpioConfig (void) {
 } 
 
 /**
+ * Continuous blinking built-in LED.
+ */ 
+void ap_monitor_heartbit() {
+    while(1) {
+        gpio_set_level(BLINK_GPIO, 0);
+        vTaskDelay(1000 / portTICK_RATE_MS);
+        gpio_set_level(BLINK_GPIO, 1);
+        vTaskDelay(1000 / portTICK_RATE_MS); 
+    }
+}
+
+/**
  * Main function.
  */ 
 void app_main(void)
 {
-    //set GPIOs
     gpioConfig();
+    xTaskCreate(&ap_monitor_heartbit, "ap_heartbit_task", 1024, NULL, 6, NULL);
 
-    //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
       ESP_ERROR_CHECK(nvs_flash_erase());
