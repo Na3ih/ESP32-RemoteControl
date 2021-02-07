@@ -1,3 +1,7 @@
+/**
+* The file contains definitions of variables and functions used to control the L293D engine driver.
+*/
+
 #pragma once
 
 #include "driver/gpio.h"
@@ -59,46 +63,4 @@ void L293D_outputBrake(struct L293D * motorDriver, L293D_OUTPUT output);
  * @param direction Desired direction of rotation.
  * @param speed TODO: VARIABLE SPEED 
  */
-void L293D_setOutput(struct L293D * motorDriver, L293D_OUTPUT output, L293D_OUTPUT_DIRECTION direction, uint8_t speed)
-
-
-// --------------------------------------------- PLATFORM -------------------------------------------------------- //
-
-/**
- * Possible directions of the platform move.
- */ 
-typedef enum MOVE_DIRECTION {
-	MOVE_DIRECTION_FORWARD,
-	MOVE_DIRECTION_BACKWARD,
-	MOVE_DIRECTION_LEFT,
-	MOVE_DIRECTION_RIGHT,
-	MOVE_DIRECTION_FORWARD_LEFT,
-	MOVE_DIRECTION_FORWARD_RIGHT,
-	MOVE_DIRECTION_BACKWARD_RIGHT,
-	MOVE_DIRECTION_BACKWARD_LEFT,
-	MOVE_DIRECTION_TURN_RIGHT,
-	MOVE_DIRECTION_TURN_LEFT
-} MOVE_DIRECTION;
-
-/**
- * Drivers declarations.
- */ 
-struct L293D motorDriver1;
-struct L293D motorDriver2;
-
-/**
- * Moves the platform in the selected direction.
- * @param direction Desired direction of rotation
- * @param speed TODO: VARIABLE SPEED 
- */
-void move(MOVE_DIRECTION direction, uint8_t speed);
-
-/**
- * Platform stop = neutral gear (cut off current from engines).
- */ 
-void stop();
-
-/**
- * Platform brake - engines blockage.
- */ 
-void brake();
+void L293D_setOutput(struct L293D * motorDriver, L293D_OUTPUT output, L293D_OUTPUT_DIRECTION direction, uint8_t speed);

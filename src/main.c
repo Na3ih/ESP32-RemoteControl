@@ -21,7 +21,7 @@
 #include "driver/gpio.h"
 
 #include "html.h"
-#include <L293D.h>
+#include <OmniWheelPlatform.h>
 
 /**
  *  HTTP headers and web pages.
@@ -35,18 +35,6 @@ const static char http_html_hdr[] = "HTTP/1.1 200 OK\nContent-type: text/html\n\
 #define EXAMPLE_ESP_WIFI_PASS      "CONFIG_ESP_WIFI_PASSWORD"
 #define EXAMPLE_ESP_WIFI_CHANNEL   1
 #define EXAMPLE_MAX_STA_CONN       1
-
-/**
- * Build in LED - info about host connection. 
- */ 
-static const gpio_num_t LED_GPIO = GPIO_NUM_2;
-
-static void gpioConfigLED() 
-{
-    gpio_pad_select_gpio(LED_GPIO);
-    gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_level(LED_GPIO, 0);
-}
 
 static const char *TAG = "wifi softAP"; ///< debug tag
 
@@ -122,7 +110,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
                  MAC2STR(event->mac), event->aid);
-        gpio_set_level(LED_GPIO, 1);
     } else if (event_id == WIFI_EVENT_AP_START) {
         ESP_LOGI(TAG, "Server starting...");
         // start the HTTP server task
@@ -133,7 +120,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
                  MAC2STR(event->mac), event->aid);
-        gpio_set_level(LED_GPIO, 0);
     }
 }
 
@@ -192,7 +178,6 @@ void wifi_init_softap(void)
  */ 
 void app_main(void)
 {
-    gpioConfigLED();
     gpioConfig(&motorDriver1);
     gpioConfig(&motorDriver2);
 
