@@ -21,6 +21,7 @@
 #include "driver/gpio.h"
 
 #include "html.h"
+#include <L293D.h>
 
 /**
  *  HTTP headers and web pages.
@@ -36,13 +37,16 @@ const static char http_html_hdr[] = "HTTP/1.1 200 OK\nContent-type: text/html\n\
 #define EXAMPLE_MAX_STA_CONN       1
 
 /**
- * GPIO pinout
+ * Build in LED - info about host connection. 
  */ 
-static const gpio_num_t FORWARD_LINE = GPIO_NUM_12; 
-static const gpio_num_t RIGHT_LINE = GPIO_NUM_13;
-static const gpio_num_t LEFT_LINE = GPIO_NUM_14;
-static const gpio_num_t BACKWARD_LINE = GPIO_NUM_27;
-static const gpio_num_t BLINK_GPIO = GPIO_NUM_2;
+static const gpio_num_t LED_GPIO = GPIO_NUM_2;
+
+static void gpioConfigLED() 
+{
+    gpio_pad_select_gpio(LED_GPIO);
+    gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_level(LED_GPIO, 0);
+}
 
 static const char *TAG = "wifi softAP"; ///< debug tag
 
@@ -64,18 +68,15 @@ static void http_server_netconn_serve(struct netconn *conn)
 			if(strstr(request_line, "GET / ")) {				
                 printf("ASKED FOR INDEX.HTML \n\n");
 			} else if (strstr(request_line, "GET /right ")) {
-                gpio_set_level(RIGHT_LINE, 1);
+                move(MOVE_DIRECTION_RIGHT, 100);
             } else if (strstr(request_line, "GET /left ")) {
-                gpio_set_level(LEFT_LINE, 1);
+                move(MOVE_DIRECTION_LEFT, 100);
             } else if (strstr(request_line, "GET /forward ")) {
-                gpio_set_level(FORWARD_LINE, 1);
+                move(MOVE_DIRECTION_FORWARD, 100);
             } else if (strstr(request_line, "GET /backward ")) {
-                gpio_set_level(BACKWARD_LINE, 1);
+                move(MOVE_DIRECTION_BACKWARD, 100);
             } else if (strstr(request_line, "GET /stop ")) {
-                gpio_set_level(RIGHT_LINE, 0);
-                gpio_set_level(LEFT_LINE, 0);
-                gpio_set_level(FORWARD_LINE, 0);
-                gpio_set_level(BACKWARD_LINE, 0);
+                stop();
             }
         /* Send our default HTML page */
         netconn_write(conn, http_html_hdr, sizeof(http_html_hdr)-1, NETCONN_NOCOPY);
@@ -121,6 +122,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
                  MAC2STR(event->mac), event->aid);
+        gpio_set_level(LED_GPIO, 1);
     } else if (event_id == WIFI_EVENT_AP_START) {
         ESP_LOGI(TAG, "Server starting...");
         // start the HTTP server task
@@ -131,6 +133,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
                  MAC2STR(event->mac), event->aid);
+        gpio_set_level(LED_GPIO, 0);
     }
 }
 
@@ -138,8 +141,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
  * Configuration mDNS service.
  */ 
 void start_mdns_service()
-{
-    
+{ 
     esp_err_t err = mdns_init();
     if (err) {
         printf("MDNS Init failed: %d\n", err);
@@ -186,37 +188,13 @@ void wifi_init_softap(void)
 }
 
 /**
- * GPIO pins configuration.
- */ 
-static void gpioConfig (void) {
-  gpio_num_t gpioMap[] = {FORWARD_LINE, BACKWARD_LINE, LEFT_LINE, RIGHT_LINE, BLINK_GPIO};
-
-  for (uint8_t i = 0; i < (sizeof(gpioMap) / sizeof(gpio_num_t)); i++) {
-      gpio_pad_select_gpio(gpioMap[i]);
-      gpio_set_direction(gpioMap[i], GPIO_MODE_OUTPUT);
-      gpio_set_level(gpioMap[i], 0);
-  }
-} 
-
-/**
- * Continuous blinking built-in LED.
- */ 
-void ap_monitor_heartbit() {
-    while(1) {
-        gpio_set_level(BLINK_GPIO, 0);
-        vTaskDelay(1000 / portTICK_RATE_MS);
-        gpio_set_level(BLINK_GPIO, 1);
-        vTaskDelay(1000 / portTICK_RATE_MS); 
-    }
-}
-
-/**
  * Main function.
  */ 
 void app_main(void)
 {
-    gpioConfig();
-    xTaskCreate(&ap_monitor_heartbit, "ap_heartbit_task", 1024, NULL, 6, NULL);
+    gpioConfigLED();
+    gpioConfig(&motorDriver1);
+    gpioConfig(&motorDriver2);
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
